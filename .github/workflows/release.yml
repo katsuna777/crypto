@@ -1,0 +1,45 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt pyinstaller
+      - run: pyinstaller --noconfirm --clean --name P2C --onefile --windowed --exclude-module tkinter main.py
+      - run: Rename-Item dist/P2C.exe "P2C-win64.exe"
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with: {name: P2C-win64.exe, path: dist/P2C-win64.exe}
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt pyinstaller
+      - run: |
+          VER="${GITHUB_REF_NAME#v}"; VER="${VER:-2.5.0}"
+          pyinstaller --noconfirm --clean --name P2C --windowed --onedir --exclude-module tkinter main.py
+          hdiutil create -volname P2C -srcfolder dist/P2C.app -ov -format UDZO "P2C-${VER}-mac.dmg"
+          ls -lh *.dmg dist/P2C.app
+      - uses: actions/upload-artifact@v4
+        with: {name: P2C-mac.dmg, path: "P2C-*.dmg"}
+
+  release:
+    needs: [win, mac]
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {path: art, merge-multiple: true}
+      - uses: softprops/action-gh-release@v2
+        with: {files: art/*, generate_release_notes: true}

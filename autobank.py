@@ -321,6 +321,52 @@ def _goto(drv, url: str, log: Callable, tag: str, wait_s: float = 12) -> Tuple[b
     return moved, cur
 
 
+def _tidy_tabs(drv, log: Callable, tag: str) -> None:
+    """Закрыть лишние пустые вкладки, встать на последнюю — ту, что видит человек.
+
+    Без этого навигация может уехать в фоновую вкладку, а на экране висит пустая.
+    """
+    try:
+        hs = list(drv.window_handles or [])
+    except Exception as e:
+        log(f"autobank [{tag}]: вкладки не читаются: {e}")
+        return
+    for h in hs[:-1]:
+        try:
+            drv.switch_to.window(h)
+            if (drv.current_url or "") in _BLANK_URLS:
+                drv.close()
+        except Exception:
+            pass
+    try:
+        left = list(drv.window_handles or [])
+        if left:
+            drv.switch_to.window(left[-1])
+    except Exception as e:
+        log(f"autobank [{tag}]: не встал на вкладку: {e}")
+
+
+def _find_bank_tab(drv) -> bool:
+    """Встать на вкладку с Альфой. True — нашёл, False — её нет."""
+    try:
+        hs = list(drv.window_handles or [])
+    except Exception:
+        return False
+    for h in hs:
+        try:
+            drv.switch_to.window(h)
+            if "alfabank" in (drv.current_url or ""):
+                return True
+        except Exception:
+            continue
+    try:
+        if hs:
+            drv.switch_to.window(hs[0])
+    except Exception:
+        pass
+    return False
+
+
 def page_block_reason(drv) -> str:
     """Пусто — страница живая; иначе маркер блокировки/ошибки края сети."""
     try:
@@ -356,7 +402,7 @@ def ensure_browser(log: Callable = print, alfa_url: str = "") -> Tuple[bool, str
     url = normalize_bank_url(alfa_url or os.environ.get("ALFA_URL", "") or ALFA_URL)
     if _driver is not None and browser_alive():
         try:
-            _driver.switch_to.window(_driver.window_handles[0])
+            _tidy_tabs(_driver, log, "alfa")
             if "alfabank" not in (_driver.current_url or ""):
                 _goto(_driver, url, log, "alfa")
             block = page_block_reason(_driver)
@@ -382,13 +428,14 @@ def ensure_browser(log: Callable = print, alfa_url: str = "") -> Tuple[bool, str
         return False, err
     try:
         drv = _attach(DEBUG_PORT)
-        drv.set_page_load_timeout(45)
+        drv.set_page_load_timeout(30)
         drv.implicitly_wait(3)
         with _mu:
             _driver = drv
     except Exception as e:
         _set("ошибка запуска", busy=False, last=str(e))
         return False, f"не приаттачился: {e}"
+    _tidy_tabs(drv, log, "alfa")  # целимся в видимую вкладку, а не в фоновую
     moved, cur = _goto(drv, url, log, "alfa")
     if not moved:
         # Первая навигация сразу после attach иногда падает в пустоту — ретрай.
@@ -396,7 +443,9 @@ def ensure_browser(log: Callable = print, alfa_url: str = "") -> Tuple[bool, str
         moved, cur = _goto(drv, url, log, "alfa-retry")
     if not moved:
         msg = (f"Chrome открыт, но ссылка не открылась (вкладка пустая). "
-               f"Открой {url} вручную в этом окне, залогинься — дальше бот подхватит сам")
+               f"Открой {url} вручную в этом окне, залогинься — дальше бот подхватит сам. "
+               f"Если висит about:blank дольше минуты — проверь сеть: нужен российский IP, выключи VPN. "
+               f"Строка «вкладка:» в журнале покажет, где встало")
         _set("открыт (нет навигации)", busy=False, last=cur)
         log(f"autobank: {msg}")
         return False, msg
@@ -649,10 +698,10 @@ def pay_order(payment: Dict, log: Callable = print, timeout: Optional[float] = N
             return False, f"ссылки кончились, оплаты нет. Скрин {_shot(drv, pid)}"
 
         # --- путь 2: ссылок нет — платим через Альфу (переводы/СБП по тексту) ---
-        try:
-            drv.switch_to.window(drv.window_handles[0])
-        except Exception:
-            pass
+        if not _find_bank_tab(drv):
+            log(f"autobank #{pid}: вкладки с Альфой нет — открываю заново")
+            _goto(drv, normalize_bank_url(os.environ.get("ALFA_URL", "") or ALFA_URL),
+                  log, f"alfa-back-{pid}", wait_s=10)
         el, found = click_by_text(drv, BTN_TRANSFERS, log, timeout=10)
         if el is None:
             return False, f"{found}. Скрин {_shot(drv, pid)} — допиши BTN_TRANSFERS"

@@ -8,7 +8,7 @@ VER=$(python3 -c "import app_info; print(app_info.__version__)" 2>/dev/null || e
 rm -rf build dist "P2C-${VER}-mac.dmg"
 ./.venv/bin/pyinstaller --noconfirm --clean \
   --name P2C --windowed --onedir \
-  --exclude-module tkinter \
+  --exclude-module tkinter --collect-all selenium \
   main.py 2>&1 | tail -n 5
 DMG="P2C-${VER}-mac.dmg"
 hdiutil create -volname P2C -srcfolder dist/P2C.app -ov -format UDZO "$DMG"

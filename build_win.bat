@@ -7,6 +7,6 @@ call .venv\Scripts\pip install -r requirements.txt pyinstaller
 rmdir /s /q build dist 2>nul
 .venv\Scripts\pyinstaller --noconfirm --clean ^
   --name P2C --onefile --windowed ^
-  --exclude-module tkinter ^
+  --exclude-module tkinter --collect-all selenium ^
   main.py
 echo OK: dist\P2C.exe

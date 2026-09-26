@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
       - run: pip install -r requirements.txt pyinstaller
-      - run: pyinstaller --noconfirm --clean --name P2C --onefile --windowed --exclude-module tkinter main.py
+      - run: pyinstaller --noconfirm --clean --name P2C --onefile --windowed --exclude-module tkinter --collect-all selenium main.py
       - run: Rename-Item dist/P2C.exe "P2C-win64.exe"
         shell: pwsh
       - uses: actions/upload-artifact@v4
@@ -28,7 +28,7 @@ jobs:
       - run: pip install -r requirements.txt pyinstaller
       - run: |
           VER="${GITHUB_REF_NAME#v}"; VER="${VER:-2.5.0}"
-          pyinstaller --noconfirm --clean --name P2C --windowed --onedir --exclude-module tkinter main.py
+          pyinstaller --noconfirm --clean --name P2C --windowed --onedir --exclude-module tkinter --collect-all selenium main.py
           hdiutil create -volname P2C -srcfolder dist/P2C.app -ov -format UDZO "P2C-${VER}-mac.dmg"
           ls -lh *.dmg dist/P2C.app
       - uses: actions/upload-artifact@v4
